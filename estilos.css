@@ -243,3 +243,5 @@ body.prueba .brand small::after{content:" · OBRA DE PRUEBA";color:var(--warn);f
 .area.sel{background:var(--accent-soft)}
 .aviso-area{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--ok-soft);border:2px solid var(--ok);border-radius:var(--r);padding:10px 12px;margin:10px 0}
 .aviso-area .btn{min-height:44px;flex:0 0 auto}
+.kpis .kpi:nth-child(even):last-child{grid-column:1/-1}
+@media (max-width:420px){.seg[style*="repeat(3"] button{border-bottom:none}.seg[style*="repeat(3"] button:nth-child(2){border-right:2px solid var(--line)}.seg[style*="repeat(3"] button:last-child{border-right:none}}

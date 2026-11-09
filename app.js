@@ -138,6 +138,7 @@ function claveCarga() { return S.mov === "entrada" ? S.obraId + "|entrada" : S.o
 function carga() {
   const k = claveCarga();
   if (!cargas[k]) cargas[k] = { items: {}, extras: [], tipo: S.mov === "entrada" ? "retorno" : (obra().requiereGalv ? "galv" : "obra"), destino: "", chofer: "", patente: "", obs: "", guiaExt: "" };
+  if (cargas[k].tipo === "galv" && !obra().requiereGalv) cargas[k].tipo = "obra"; /* borrador antiguo */
   return cargas[k];
 }
 function guardarCarga() { store.set("cargas", cargas); }
@@ -640,12 +641,13 @@ function renderRevisar(m) {
   const d = Object.assign({}, c, { items, obraId: o.id });
   const t = totales(d, o);
   const listo = items.length + c.extras.filter(e => e.txt && e.q > 0).length > 0;
+  const destinos = SALIDAS.filter(k => k !== "galv" || o.requiereGalv);
   m.innerHTML = `
     <p><button class="btn ghost" type="button" data-go="elegir">← Seguir agregando piezas</button></p>
     <h2>Revisar carga</h2>
     <h3>Destino</h3>
-    <div class="seg" role="group" aria-label="Destino">
-      ${SALIDAS.map(k => `<button type="button" data-tipo="${k}" aria-pressed="${c.tipo === k}">${TIPOS[k].label}</button>`).join("")}
+    <div class="seg" role="group" aria-label="Destino" ${destinos.length === 3 ? 'style="grid-template-columns:repeat(3,1fr)"' : ""}>
+      ${destinos.map(k => `<button type="button" data-tipo="${k}" aria-pressed="${c.tipo === k}">${TIPOS[k].label}</button>`).join("")}
     </div>
     ${c.tipo === "galv" ? `<p class="small muted">Sale a GYMSA. Cuando vuelva, regístralo en “Vuelve de GYMSA” y después despacha a obra con otra guía.</p>` : ""}
     ${c.tipo === "pintura" || c.tipo === "otro" ? `<div class="field" style="margin-top:12px"><label for="destino">Dirección / empresa de destino</label>
@@ -1026,11 +1028,11 @@ function renderAvance(m) {
       <div class="kpi big"><div class="v num">${pct(T.obra[1], T.kg)}%</div><div class="l">del peso total ya despachado a obra · ${peso(T.obra[1])} de ${peso(T.kg)}</div>
         <div class="bar" aria-hidden="true">${barra(T.obra[1], T.lista[1], T.gymsa[1], T.kg)}</div>
         <div class="legend"><span><i style="background:var(--ok)"></i>En obra</span>
-          ${galv ? `<span><i style="background:var(--lista)"></i>Galvanizado en planta</span><span><i style="background:var(--info)"></i>En GYMSA</span>` : `<span><i style="background:var(--info)"></i>En pintura / tratamiento</span>`}
+          ${galv ? `<span><i style="background:var(--lista)"></i>Galvanizado en planta</span><span><i style="background:var(--info)"></i>En GYMSA</span>` : (T.gymsa[0] ? `<span><i style="background:var(--info)"></i>En pintura</span>` : "")}
           <span><i style="background:var(--surface-2);border:1px solid var(--line-soft)"></i>${galv ? "Por galvanizar" : "En maestranza"}</span></div></div>
       <div class="kpi"><div class="v num">${fmt(T.obra[0])}</div><div class="l">de ${fmt(T.pz)} piezas en obra</div></div>
       ${galv ? `<div class="kpi"><div class="v num">${fmt(T.lista[0])}</div><div class="l">galvanizadas en planta, listas para obra · ${peso(T.lista[1])}</div></div>` : ""}
-      <div class="kpi"><div class="v num">${fmt(T.gymsa[0])}</div><div class="l">${galv ? "piezas en GYMSA" : "piezas en tratamiento"} · ${peso(T.gymsa[1])}</div></div>
+      ${galv || T.gymsa[0] ? `<div class="kpi"><div class="v num">${fmt(T.gymsa[0])}</div><div class="l">${galv ? "piezas en GYMSA" : "piezas en pintura"} · ${peso(T.gymsa[1])}</div></div>` : ""}
       <div class="kpi"><div class="v num">${fmt(guias.length)}</div><div class="l">despachos (${fmt(guias.filter(d => d.guia).length)} con guía)</div></div>
       <div class="kpi"><div class="v num" style="color:${conDif ? "var(--bad)" : "inherit"}">${fmt(conDif)}</div><div class="l">recepciones con diferencias</div></div>
     </div>
