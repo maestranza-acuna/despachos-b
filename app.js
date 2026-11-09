@@ -67,6 +67,9 @@ function textoError(err) {
 }
 
 /* ===== Conexión ===== */
+/* El enlace del correo de recuperación vuelve con estos datos en la dirección; se leen antes de que la librería los limpie */
+const VOLVIO_RECUPERACION = /type=recovery/.test(location.hash);
+const ENLACE_VENCIDO = /error_code=otp_expired|error=access_denied/.test(location.hash);
 const CFG = window.CONFIG || {};
 const sb = (window.supabase && CFG.supabaseUrl && CFG.supabaseKey)
   ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "despachos-b-sesion" } })
@@ -349,20 +352,33 @@ function pantallaAcceso(modo = "entrar", msg = "") {
   m.innerHTML = `
     <div class="acceso">
       <img src="iconos/icono-192.png" alt="" width="72" height="72">
-      <h2>${modo === "entrar" ? "Entrar" : "Crear cuenta"}</h2>
-      ${msg ? `<div class="note ${/Listo|creada/.test(msg) ? "" : "warn"}">${esc(msg)}</div>` : ""}
+      <h2>${modo === "entrar" ? "Entrar" : modo === "crear" ? "Crear cuenta" : "Recuperar contraseña"}</h2>
+      ${msg ? `<div class="note ${/Listo|creada|Enviamos/.test(msg) ? "" : "warn"}">${esc(msg)}</div>` : ""}
       <form id="formAcceso" autocomplete="on" novalidate>
         ${modo === "crear" ? `<div class="field"><label for="aNombre">Nombre y apellido</label><input id="aNombre" class="inp" autocomplete="name" required></div>` : ""}
         <div class="field"><label for="aCorreo">Correo</label><input id="aCorreo" class="inp" type="email" inputmode="email" autocomplete="username" autocapitalize="none" required></div>
-        <div class="field"><label for="aClave">Contraseña</label><input id="aClave" class="inp" type="password" autocomplete="${modo === "entrar" ? "current-password" : "new-password"}" minlength="8" required></div>
-        <button class="btn pri block" type="submit">${modo === "entrar" ? "Entrar" : "Crear cuenta"}</button>
+        ${modo === "recuperar" ? `<p class="small" style="margin-top:0">Te enviaremos un enlace a tu correo para que elijas una contraseña nueva.</p>` : `<div class="field"><label for="aClave">Contraseña</label><input id="aClave" class="inp" type="password" autocomplete="${modo === "entrar" ? "current-password" : "new-password"}" minlength="8" required></div>`}
+        <button class="btn pri block" type="submit">${modo === "entrar" ? "Entrar" : modo === "crear" ? "Crear cuenta" : "Enviar enlace"}</button>
       </form>
       <p class="small" style="text-align:center">${modo === "entrar"
         ? `¿Primera vez? <button type="button" class="link" data-acceso="crear">Crear cuenta</button>`
         : `¿Ya tienes cuenta? <button type="button" class="link" data-acceso="entrar">Entrar</button>`}</p>
-      <p class="small muted" style="text-align:center">Si olvidaste tu contraseña, pídele al administrador que te asigne una nueva.</p>
+      ${modo === "entrar" ? `<p class="small" style="text-align:center"><button type="button" class="link" data-acceso="recuperar">¿Olvidaste tu contraseña?</button></p>` : ""}
     </div>`;
   S.modoAcceso = modo;
+}
+function pantallaNuevaClave() {
+  if ($("#formClave")) return;
+  $(".nav").hidden = true; $("#cargo").hidden = true; $("#cuentaBtn").hidden = true; $("#obraSel").hidden = true; $("#sync").hidden = true;
+  $("#main").innerHTML = `
+    <div class="acceso">
+      <h2>Contraseña nueva</h2>
+      <form id="formClave" autocomplete="on" novalidate>
+        <div class="field"><label for="nClave">Contraseña nueva (mínimo 8 caracteres)</label><input id="nClave" class="inp" type="password" autocomplete="new-password" minlength="8" required></div>
+        <div class="field"><label for="nClave2">Repite la contraseña</label><input id="nClave2" class="inp" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn pri block" type="submit">Guardar contraseña</button>
+      </form>
+    </div>`;
 }
 function pantallaPendiente() {
   $(".nav").hidden = true; $("#cargo").hidden = true; $("#obraSel").hidden = true;
@@ -1047,9 +1063,10 @@ function pintarTablaAv() {
   if (S.filtroAv === "desp") filas = filas.filter(f => f.eo > 0);
   if (q) filas = filas.filter(f => norm(f.x.m).startsWith(q));
   const filasVis = filas.slice(0, 150);
+  const galv = !!obra().requiereGalv;
   w.innerHTML = `<div class="tblwrap"><table>
-      <thead><tr><th>Marca</th><th>Total</th><th>A galv.</th><th>Volvió</th><th>En obra</th><th>Faltan</th></tr></thead>
-      <tbody>${filasVis.map(f => `<tr><td class="code">${esc(marcaGuia(f.x.m))}</td><td class="num">${f.x.cant}</td><td class="num">${f.et || ""}</td><td class="num">${f.er || ""}</td><td class="num">${f.eo || ""}</td>
+      <thead><tr><th>Marca</th><th>Total</th>${galv ? "<th>A galv.</th><th>Volvió</th>" : ""}<th>En obra</th><th>Faltan</th></tr></thead>
+      <tbody>${filasVis.map(f => `<tr><td class="code">${esc(marcaGuia(f.x.m))}</td><td class="num">${f.x.cant}</td>${galv ? `<td class="num">${f.et || ""}</td><td class="num">${f.er || ""}</td>` : ""}<td class="num">${f.eo || ""}</td>
         <td class="num"><b>${Math.max(f.x.cant - f.eo, 0) || "✓"}</b></td></tr>`).join("")}</tbody>
     </table></div>
     ${filas.length > filasVis.length ? `<p class="small muted">Mostrando 150 de ${fmt(filas.length)}. Usa el buscador para acotar.</p>` : ""}
@@ -1084,7 +1101,7 @@ function renderCuenta(m) {
     ${puede.admin() ? `
     ${o.id ? htmlAdminObra(o) : ""}
     <h3>Usuarios</h3>
-    <p class="small muted" style="margin-top:0">Cada persona crea su cuenta desde la app (“Crear cuenta”). Aparece aquí inactiva: asígnale un rol y actívala. Para cambiar una contraseña olvidada: Supabase → Authentication → Users.</p>
+    <p class="small muted" style="margin-top:0">Cada persona crea su cuenta desde la app (“Crear cuenta”). Aparece aquí inactiva: asígnale un rol y actívala. Quien olvide su contraseña la recupera desde “¿Olvidaste tu contraseña?” en la pantalla de ingreso.</p>
     <div class="items">
       ${perfiles.map(p => `<div class="usr">
         <input class="inp" id="un-${esc(p.id)}" value="${esc(p.nombre)}" aria-label="Nombre">
@@ -1130,8 +1147,9 @@ function exportar(que) {
     ]));
     descargarCSV(`despachos_${base}_${hoy}.csv`, filas);
   } else {
-    const filas = [["Marca", "Marca guía", "Descripción", "Perfil", "Cantidad", "Kg unit.", "A galvanizado", "Volvió", "A obra", "Recibido en obra", "Faltan"]];
-    etapas(o).filas.forEach(f => filas.push([f.x.m, marcaGuia(f.x.m), f.x.desc, f.x.perfil, f.x.cant, String(f.x.kgU).replace(".", ","), f.et, f.er, f.eo, f.rec, Math.max(f.x.cant - f.eo, 0)]));
+    const galv = !!o.requiereGalv;
+    const filas = [["Marca", "Marca guía", "Descripción", "Perfil", "Cantidad", "Kg unit.", ...(galv ? ["A galvanizado", "Volvió"] : []), "A obra", "Recibido en obra", "Faltan"]];
+    etapas(o).filas.forEach(f => filas.push([f.x.m, marcaGuia(f.x.m), f.x.desc, f.x.perfil, f.x.cant, String(f.x.kgU).replace(".", ","), ...(galv ? [f.et, f.er] : []), f.eo, f.rec, Math.max(f.x.cant - f.eo, 0)]));
     descargarCSV(`avance_${base}_${hoy}.csv`, filas);
   }
   toast("Archivo descargado. Ábrelo con Excel.");
@@ -1174,8 +1192,31 @@ async function conBoton(t, fn) {
   try { await fn(); } catch (e) { toast(textoError(e)); } finally { if (t.isConnected) t.disabled = false; }
 }
 document.addEventListener("submit", async ev => {
+  if (ev.target.id === "formClave") {
+    ev.preventDefault();
+    const c1 = $("#nClave").value, c2 = $("#nClave2").value, b = ev.target.querySelector("button[type=submit]");
+    if (c1.length < 8) { toast("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (c1 !== c2) { toast("Las dos contraseñas no coinciden."); return; }
+    b.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: c1 });
+    if (error) { toast(textoError(error)); b.disabled = false; return; }
+    S.cambiandoClave = false;
+    history.replaceState(null, "", location.pathname);
+    toast("Contraseña cambiada");
+    arrancar();
+    return;
+  }
   if (ev.target.id !== "formAcceso") return;
   ev.preventDefault();
+  if (S.modoAcceso === "recuperar") {
+    const mail = $("#aCorreo").value.trim(), b = ev.target.querySelector("button[type=submit]");
+    if (!mail) { toast("Escribe tu correo."); return; }
+    b.disabled = true;
+    const { error } = await sb.auth.resetPasswordForEmail(mail, { redirectTo: location.origin + location.pathname });
+    if (error) { toast(/rate limit/i.test(error.message) ? "Se enviaron muchos correos. Espera una hora e inténtalo de nuevo." : textoError(error)); b.disabled = false; return; }
+    pantallaAcceso("entrar", "Enviamos un enlace a tu correo, si está registrado. Revisa también la carpeta de spam.");
+    return;
+  }
   const correo = $("#aCorreo").value.trim(), clave = $("#aClave").value;
   const btn = ev.target.querySelector("button[type=submit]");
   if (!correo || clave.length < 8) { toast("Escribe tu correo y una contraseña de al menos 8 caracteres."); return; }
@@ -1430,17 +1471,20 @@ function toast(msg) {
 
   /* No consultar la base dentro de este aviso (la librería lo bloquea): se arranca en el siguiente ciclo */
   sb.auth.onAuthStateChange((evento, sesion) => {
-    if (evento === "SIGNED_IN" && sesion && (!S.sesion || S.sesion.user.id !== sesion.user.id)) { S.sesion = sesion; setTimeout(arrancar, 0); }
+    if (evento === "PASSWORD_RECOVERY" && sesion) { S.cambiandoClave = true; S.sesion = sesion; setTimeout(pantallaNuevaClave, 0); return; }
+    if (evento === "SIGNED_IN" && sesion && !S.cambiandoClave && (!S.sesion || S.sesion.user.id !== sesion.user.id)) { S.sesion = sesion; setTimeout(arrancar, 0); }
     if (evento === "SIGNED_OUT") { S.sesion = null; S.yo = null; pantallaAcceso(); }
   });
   let sesion = null;
   try { sesion = (await sb.auth.getSession()).data.session; } catch (e) {}
   const yoGuardado = store.get("yo", null);
-  if (sesion) { S.sesion = sesion; arrancar(); }
+  if (VOLVIO_RECUPERACION) S.cambiandoClave = true;
+  if (sesion && S.cambiandoClave) { S.sesion = sesion; pantallaNuevaClave(); }
+  else if (sesion) { S.sesion = sesion; arrancar(); }
   else if (!navigator.onLine && yoGuardado && yoGuardado.activo) {
     /* Sin señal y con la sesión vencida: se abre con la copia local; al volver la señal se valida la sesión */
     S.sesion = { user: { id: yoGuardado.id, email: yoGuardado.correo } }; S.red = "sin_senal"; arrancar();
     addEventListener("online", async () => { const s = (await sb.auth.getSession()).data.session; if (!s) pantallaAcceso("entrar", "Tu sesión venció. Entra de nuevo."); }, { once: true });
   }
-  else pantallaAcceso();
+  else pantallaAcceso("entrar", ENLACE_VENCIDO ? "El enlace venció o ya se usó. Pide uno nuevo en “¿Olvidaste tu contraseña?”." : "");
 })();
